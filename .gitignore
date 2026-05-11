@@ -1,0 +1,31 @@
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Models and Large Data
+bert_clause_model/
+chroma_db/
+results/
+*.safetensors
+*.pt
+*.pth
+*.bin
+
+# Frontend
+node_modules/
+dist/
+build/
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

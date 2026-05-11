@@ -1,0 +1,14 @@
+flask
+flask-cors
+groq
+transformers
+torch
+scikit-learn
+pandas
+numpy
+pymupdf
+chromadb
+sentence-transformers
+loguru
+pdfplumber
+python-docx
