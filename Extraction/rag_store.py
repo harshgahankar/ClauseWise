@@ -35,11 +35,12 @@ class SimpleRetriever:
 # Global retriever instance
 retriever = SimpleRetriever()
 
-def store_all_clauses(clauses):
-    """Stores clauses in the lightweight retriever."""
+def store_all_clauses(clauses, **kwargs):
+    """Stores clauses in the lightweight retriever. Accepts contract_id for compatibility."""
     print(f"* Storing {len(clauses)} clauses in memory...", flush=True)
     retriever.add_clauses(clauses)
     return True
+
 
 def retrieve_similar(query, top_k=3):
     """Retrieves similar clauses using TF-IDF."""
