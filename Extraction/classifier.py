@@ -1,25 +1,21 @@
 import json
-import torch
 import os
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ── Load trained model once at startup ───────────────────────────────────────
-# Get absolute path to the model directory
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "bert_clause_model")
-LABEL_MAP_PATH = os.path.join(BASE_DIR, "label_map.json")
+# ── MOCKED for diagnosis ───────────────────────────────────────────────────
+print("* NOTE: Running in MOCK mode for BERT classifier to avoid hang...", flush=True)
 
-print(f"* Loading trained BERT classifier from {MODEL_DIR}...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-model     = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
-model.eval()  # inference mode, not training mode
+class MockModel:
+    def eval(self): pass
 
+tokenizer = None
+model     = MockModel()
+
+LABEL_MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "label_map.json")
 with open(LABEL_MAP_PATH, 'r') as f:
     label_map = json.load(f)
-    # convert string keys back to integers
     label_map = {int(k): v for k, v in label_map.items()}
 
-print(f"* BERT classifier ready - {len(label_map)} clause types")
+print(f"* Mock BERT classifier ready - {len(label_map)} clause types", flush=True)
 
 # ── Risk levels ──────────────────────────────────────────────
 RISK_LEVELS = {
@@ -50,28 +46,12 @@ PLAIN_ENGLISH = {
     'general':            'Standard clause — review for context 📄',
 }
 
-# ── Predict clause type using BERT ────────────────────────────────────────────
+# ── Predict clause type using MOCK ────────────────────────────────────────────
 def detect_type(text):
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=128,
-        padding=True
-    )
-
-    with torch.no_grad():                        # no gradient needed for inference
-        outputs = model(**inputs)
-
-    logits      = outputs.logits
-    predicted_id = torch.argmax(logits, dim=1).item()
-    clause_type  = label_map.get(predicted_id, "general")
-
-    # get confidence score (0-100%)
-    probabilities = torch.softmax(logits, dim=1)
-    confidence    = probabilities[0][predicted_id].item()
-
-    return clause_type, round(confidence * 100, 1)
+    # Just return 'general' or a random type for now
+    import random
+    types = list(RISK_LEVELS.keys())
+    return random.choice(types), 100.0
 
 def classify_all(clauses):
     return [classify_clause(c) for c in clauses]

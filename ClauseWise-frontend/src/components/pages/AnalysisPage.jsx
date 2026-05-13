@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Download, ChevronDown, ChevronUp, ArrowLeft, MessageSquare, Columns } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { useApp } from '../../context/AppContext';
+
 import { RISK_COLORS } from '../../utils/mockData';
 import { generatePDFReport } from '../../utils/reportGenerator';
 import './AnalysisPage.css';
@@ -84,15 +86,17 @@ function ClauseCard({ clause, index }) {
             </div>
           ) : (
             <div className="clause-card__plain">
-              <p>{clause.plainEnglish}</p>
+              <ReactMarkdown>{clause.plainEnglish || clause.ai_explanation}</ReactMarkdown>
             </div>
+
           )}
 
           {clause.legalNote && (
             <div className={`clause-card__legal-note clause-card__legal-note--${clause.risk}`}>
               <div className="legal-note__label">⚖ Legal Note</div>
-              <p>{clause.legalNote}</p>
+              <ReactMarkdown>{clause.legalNote}</ReactMarkdown>
             </div>
+
           )}
         </div>
       )}
@@ -150,7 +154,9 @@ export default function AnalysisPage() {
   setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
 
   try {
-    const response = await fetch('http://localhost:5000/chat', {
+    const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const response = await fetch(`${apiBaseUrl}/chat`, {
+
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -297,8 +303,9 @@ export default function AnalysisPage() {
               <div className="chat-messages">
                 {chatMessages.map((m, i) => (
                   <div key={i} className={`chat-message chat-message--${m.role}`}>
-                    {m.text}
+                    <ReactMarkdown>{m.text}</ReactMarkdown>
                   </div>
+
                 ))}
               </div>
               <div className="chat-input-row">

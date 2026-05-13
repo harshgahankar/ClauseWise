@@ -1,10 +1,31 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+import os
+
+# Disable GPU to prevent hangs if drivers are acting up
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+print("\n--- Starting ClauseWise Backend ---", flush=True)
+print("* Loading environment...", flush=True)
+load_dotenv() 
+
+print("* Initializing extraction engine...", flush=True)
 from extractor import extract_clauses
+
+print("* Loading BERT classification model (this may take a minute)...", flush=True)
 from classifier import classify_all
+
+print("* Connecting to AI translation service...", flush=True)
 from translator import translate_all
+
+print("* Loading scoring logic...", flush=True)
 from scorer import score_contract
+
+print("* Initializing RAG database and embedding model...", flush=True)
 from rag_store import store_all_clauses, get_store_stats
+
+print("* Preparing QA engine...", flush=True)
 from rag_qa import answer_question
 import uuid
 

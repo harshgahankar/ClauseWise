@@ -1,6 +1,10 @@
 import os
 from groq import Groq
 from rag_store import retrieve_similar
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 

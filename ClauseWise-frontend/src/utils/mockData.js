@@ -69,7 +69,8 @@ export const RISK_COLORS = {
 };
 
 // ── NEW: converts your backend response → your frontend shape ─────────────────
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 
 function mapRiskLevel(backendLevel) {
   if (backendLevel === 'high')   return 'unsafe';

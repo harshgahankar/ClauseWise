@@ -2,7 +2,7 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 import uuid
 
-print("* Loading embedding model...")
+print("* Loading embedding model...", flush=True)
 embedder = SentenceTransformer('all-MiniLM-L6-v2')  # free, fast, no API needed
 
 # persists to disk — survives server restarts

@@ -395,6 +395,15 @@
   margin-bottom: 4px;
 }
 
+.clause-card__plain strong, .clause-card__legal-note strong {
+  background-color: rgba(255, 225, 0, 0.3);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+
 /* Chat */
 .chat-overlay {
   position: fixed;
@@ -462,6 +471,20 @@
   color: white;
   align-self: flex-end;
 }
+
+.chat-message strong {
+  background-color: rgba(255, 225, 0, 0.4);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.chat-message--user strong {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
 .chat-input-row {
   display: flex;
   gap: 8px;

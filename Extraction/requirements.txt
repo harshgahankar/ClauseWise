@@ -12,3 +12,5 @@ sentence-transformers
 loguru
 pdfplumber
 python-docx
+python-dotenv
+gunicorn

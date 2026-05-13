@@ -2,8 +2,17 @@ import os
 import numpy as np
 from groq import Groq
 from rag_store import embed
+from dotenv import load_dotenv
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Load environment variables
+load_dotenv()
+
+try:
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+except Exception as e:
+    print(f"Error initializing Groq client: {e}")
+    client = None
+
 
 def answer_question(question, contract_clauses):
     if not contract_clauses:
@@ -40,29 +49,41 @@ def answer_question(question, contract_clauses):
     ])
 
     prompt = f"""You are a friendly Legal Assistant. Your goal is to explain contract clauses so clearly that even a child could understand.
+    
+    Available Context:
+    {context}
+    
+    User Question: {question}
+    
+    Instructions:
+    - Provide a simple, clear, and very easy-to-understand answer.
+    - **Highlight important terms, key sentences, or risky parts by wrapping them in bold (e.g., **this is risky**).**
+    - Use emojis to make the response friendly and engaging (e.g., ✅, ⚠️, 🚩).
+    - Use clear bullet points on NEW LINES for lists (e.g., - Item 1).
+    - Use double new lines between paragraphs for clear spacing.
+    - Be decisive. If a clause is safe, say so. If it has a risk, explain it simply.
+    - Avoid all legal jargon and complex words.
+    - Keep the response under 100 words.
+    - Use "explain like I'm five" (ELI5) logic.
+    - Ensure the layout is clean and easy to read at a glance. """
 
-Available Context:
-{context}
 
-User Question: {question}
+    if not client or not os.getenv("GROQ_API_KEY"):
+        return "⚠️ Groq API Key is missing or invalid. Please check your .env file."
 
-Instructions:
-- Provide a simple, clear, and very easy-to-understand answer.
-- Use emojis to make the response friendly and engaging (e.g., ✅, ⚠️, 🚩).
-- Use clear bullet points on NEW LINES for lists (e.g., - Item 1).
-- Use double new lines between paragraphs for clear spacing.
-- Be decisive. If a clause is safe, say so. If it has a risk, explain it simply.
-- Avoid all legal jargon and complex words.
-- Keep the response under 80 words.
-- Use "explain like I'm five" (ELI5) logic.
-- Ensure the layout is clean and easy to read at a glance. """
-
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        max_tokens=300,
-        messages=[
-            {"role": "system", "content": "You are a friendly legal expert who simplifies complex contracts with total clarity and uses helpful emojis."},
-            {"role": "user",   "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=300,
+            messages=[
+                {"role": "system", "content": "You are a friendly legal expert who simplifies complex contracts with total clarity and uses helpful emojis."},
+                {"role": "user",   "content": prompt}
+            ]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Groq API Error: {e}")
+        if "401" in str(e) or "invalid_api_key" in str(e).lower():
+            return "🔐 Your Groq API Key is invalid. Please generate a new one from the Groq console and update your .env file."
+        return f"❌ Sorry, I encountered an error while thinking: {str(e)}"
+
