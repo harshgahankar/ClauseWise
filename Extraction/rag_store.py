@@ -1,63 +1,54 @@
-import chromadb
-from sentence_transformers import SentenceTransformer
+import os
 import uuid
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
-print("* Loading embedding model...", flush=True)
-embedder = SentenceTransformer('all-MiniLM-L6-v2')  # free, fast, no API needed
+# A very lightweight Tfidf-based retriever to replace heavy SentenceTransformers
+class SimpleRetriever:
+    def __init__(self):
+        self.vectorizer = TfidfVectorizer(stop_words='english')
+        self.clauses = []
+        self.matrix = None
 
-# persists to disk — survives server restarts
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection    = chroma_client.get_or_create_collection(
-    name="clauses",
-    metadata={"heuristic": "cosine"}
-)
+    def add_clauses(self, clauses):
+        self.clauses = clauses
+        if not clauses:
+            return
+        texts = [c.get('full_text', '') for c in clauses]
+        self.matrix = self.vectorizer.fit_transform(texts)
 
-def embed(text):
-    return embedder.encode(text).tolist()
+    def search(self, query, top_k=3):
+        if not self.clauses or self.matrix is None:
+            return []
+        
+        query_vec = self.vectorizer.transform([query])
+        similarities = cosine_similarity(query_vec, self.matrix).flatten()
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+        
+        results = []
+        for idx in top_indices:
+            if similarities[idx] > 0:
+                results.append(self.clauses[idx])
+        return results
 
-def store_clause(clause_text, clause_type, risk_level, plain_english, contract_id=None):
-    collection.add(
-        ids        = [str(uuid.uuid4())],
-        embeddings = [embed(clause_text)],
-        documents  = [clause_text],
-        metadatas  = [{
-            'type':          clause_type,
-            'risk_level':    risk_level,
-            'plain_english': plain_english,
-            'contract_id':   contract_id or 'unknown',
-        }]
-    )
+# Global retriever instance
+retriever = SimpleRetriever()
 
-def retrieve_similar(clause_text, n=3):
-    count = collection.count()
-    if count == 0:
-        return []
-    results = collection.query(
-        query_embeddings = [embed(clause_text)],
-        n_results        = min(n, count),
-        include          = ['documents', 'metadatas', 'distances']
-    )
-    similar = []
-    for i in range(len(results['documents'][0])):
-        similar.append({
-            'text':          results['documents'][0][i],
-            'type':          results['metadatas'][0][i]['type'],
-            'risk_level':    results['metadatas'][0][i]['risk_level'],
-            'plain_english': results['metadatas'][0][i]['plain_english'],
-            'similarity':    round(1 - results['distances'][0][i], 3),
-        })
-    return similar
+def store_all_clauses(clauses):
+    """Stores clauses in the lightweight retriever."""
+    print(f"* Storing {len(clauses)} clauses in memory...", flush=True)
+    retriever.add_clauses(clauses)
+    return True
 
-def store_all_clauses(clauses, contract_id=None):
-    for clause in clauses:
-        store_clause(
-            clause_text   = clause.get('full_text', ''),
-            clause_type   = clause.get('type', 'general'),
-            risk_level    = clause.get('risk_level', 'low'),
-            plain_english = clause.get('plain_english', ''),
-            contract_id   = contract_id,
-        )
-    print(f"* Stored {len(clauses)} clauses (total in DB: {collection.count()})")
+def retrieve_similar(query, top_k=3):
+    """Retrieves similar clauses using TF-IDF."""
+    return retriever.search(query, top_k)
 
 def get_store_stats():
-    return {'total_clauses_stored': collection.count()}
+    """Returns basic stats about the stored clauses."""
+    return {"count": len(retriever.clauses)}
+
+# Placeholder for backward compatibility
+def embed(text):
+    return [0.0] * 384

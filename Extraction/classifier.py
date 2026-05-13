@@ -1,81 +1,77 @@
 import json
 import os
+from groq import Groq
+from dotenv import load_dotenv
 
-# ── MOCKED for diagnosis ───────────────────────────────────────────────────
-print("* NOTE: Running in MOCK mode for BERT classifier to avoid hang...", flush=True)
+# Load environment variables
+load_dotenv()
 
-class MockModel:
-    def eval(self): pass
+# Initialize Groq client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-tokenizer = None
-model     = MockModel()
-
+# Load label map for reference
 LABEL_MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "label_map.json")
 with open(LABEL_MAP_PATH, 'r') as f:
     label_map = json.load(f)
     label_map = {int(k): v for k, v in label_map.items()}
 
-print(f"* Mock BERT classifier ready - {len(label_map)} clause types", flush=True)
-
-# ── Risk levels ──────────────────────────────────────────────
+# Risk levels
 RISK_LEVELS = {
-    'auto_renewal':       {'level': 'high',   'color': 'red'},
-    'liability_waiver':   {'level': 'high',   'color': 'red'},
-    'arbitration':        {'level': 'high',   'color': 'red'},
-    'data_selling':       {'level': 'high',   'color': 'red'},
-    'unilateral_changes': {'level': 'high',   'color': 'red'},
-    'exit_penalty':       {'level': 'medium', 'color': 'amber'},
-    'price_escalation':   {'level': 'medium', 'color': 'amber'},
-    'jurisdiction':       {'level': 'medium', 'color': 'amber'},
-    'ip_ownership':       {'level': 'medium', 'color': 'amber'},
-    'notice_period':      {'level': 'low',    'color': 'green'},
-    'general':            {'level': 'low',    'color': 'green'},
+    'non_compete':       'high',
+    'intellectual_prop': 'high',
+    'termination':       'high',
+    'arbitration':       'medium',
+    'confidentiality':   'medium',
+    'indemnification':   'high',
+    'governing_law':    'low',
+    'compensation':      'low',
+    'vacation':          'low',
+    'general':           'low',
 }
 
-PLAIN_ENGLISH = {
-    'auto_renewal':       'Contract renews automatically unless cancelled 🔄',
-    'liability_waiver':   'Company not responsible for damages or losses 🛡️',
-    'arbitration':        'You waive your right to sue in court ⚖️',
-    'data_selling':       'Your data may be sold or shared with third parties 📂',
-    'unilateral_changes': 'Company can change terms without notice 📝',
-    'exit_penalty':       'Early termination fees apply 💸',
-    'price_escalation':   'Price can increase periodically 📈',
-    'jurisdiction':       'Disputes handled in another state or country 🏛️',
-    'ip_ownership':       'Company owns content you create on the platform 🎨',
-    'notice_period':      'Long notice period required to cancel ⏳',
-    'general':            'Standard clause — review for context 📄',
-}
+def detect_type_llm(text):
+    """Use Groq to classify the clause type to save RAM."""
+    if not os.getenv("GROQ_API_KEY"):
+        return "general", 100.0
 
-# ── Predict clause type using MOCK ────────────────────────────────────────────
-def detect_type(text):
-    # Just return 'general' or a random type for now
-    import random
-    types = list(RISK_LEVELS.keys())
-    return random.choice(types), 100.0
+    prompt = f"""Classify the following legal clause into ONE of these categories: 
+    {', '.join(label_map.values())}
+    
+    Clause Text: {text[:500]}
+    
+    Return ONLY the category name."""
 
-def classify_all(clauses):
-    return [classify_clause(c) for c in clauses]
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=10,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        prediction = response.choices[0].message.content.strip().lower()
+        
+        # Match with label map
+        for val in label_map.values():
+            if val.lower() in prediction:
+                return val, 95.0
+        return "general", 80.0
+    except:
+        return "general", 50.0
 
 def classify_clause(clause):
-    full_text         = clause.get('full_text', '')
-    clause_type, conf = detect_type(full_text)
+    """Adds classification and risk level to a single clause."""
+    text = clause.get('full_text', '')
+    
+    # Using LLM classification to save RAM (avoiding BERT/Torch)
+    clause_type, confidence = detect_type_llm(text)
+    
+    clause['type'] = clause_type
+    clause['confidence'] = confidence
+    clause['risk_level'] = RISK_LEVELS.get(clause_type, 'low')
+    
+    return clause
 
-    # ── Self-healing ──────────────────────────────────────────────────────────
-    was_healed = False
-    try:
-        from rag_healer import heal_classification
-        clause_type, conf, was_healed = heal_classification(full_text, clause_type, conf)
-    except Exception as e:
-        print(f"  Healer skipped: {e}")
-
-    risk = RISK_LEVELS.get(clause_type, RISK_LEVELS['general'])
-    return {
-        **clause,
-        'type':        clause_type,
-        'confidence':  conf,
-        'self_healed': was_healed,
-        'risk_level':  risk['level'],
-        'flag_color':  risk['color'],
-        'plain_english': PLAIN_ENGLISH.get(clause_type, ''),
-        'is_risky':    risk['level'] in ('high', 'medium'),
-    }
+def classify_all(clauses):
+    """Classifies a list of clauses."""
+    # To save time/API calls, we only classify the first few or use a faster method
+    # For now, let's just do all of them as it's a small number usually
+    return [classify_clause(c) for c in clauses]

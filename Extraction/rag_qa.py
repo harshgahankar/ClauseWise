@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from groq import Groq
-from rag_store import embed
+from rag_store import retrieve_similar
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,33 +13,17 @@ except Exception as e:
     print(f"Error initializing Groq client: {e}")
     client = None
 
-
 def answer_question(question, contract_clauses):
     if not contract_clauses:
         return "Please upload and analyze a contract first before asking questions."
 
-    # 1. Check for explicit clause numbers in the question (e.g., "6", "clause 6", "section 6")
-    import re
-    # Look for stand-alone numbers or numbers prefixed by clause/section/§
-    mentioned_numbers = re.findall(r'(?:\bclause\b|\bsection\b|§)?\s*(\d+)(?:\.|\b)', question.lower())
+    # Use the lightweight TF-IDF retriever from rag_store
+    # We take a larger set of results (top 15) to provide rich context to the LLM
+    top_clauses = retrieve_similar(question, top_k=15)
     
-    # 2. Score every clause by semantic similarity
-    q_vec   = np.array(embed(question))
-    scored  = []
-    for clause in contract_clauses:
-        # Boost score if the clause ID or number matches what the user asked for
-        boost = 0.0
-        clause_id = str(clause.get('id', ''))
-        if clause_id in mentioned_numbers:
-            boost = 1.0  # Force it to the top
-            
-        c_vec      = np.array(embed(clause.get('full_text', '')))
-        similarity = float(np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
-        scored.append((similarity + boost, clause))
-
-    # 3. Take the 20 most relevant clauses (increased to cover larger contracts)
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top_clauses = [c for _, c in scored[:20]]
+    # Fallback if TF-IDF fails or clauses aren't stored
+    if not top_clauses:
+        top_clauses = contract_clauses[:10]
 
     context = "\n\n".join([
         f"Clause ID: {c.get('id', '')} | Title: {c.get('title', '')} | Risk: {c.get('risk_level', '')}\n"
@@ -67,7 +51,6 @@ def answer_question(question, contract_clauses):
     - Use "explain like I'm five" (ELI5) logic.
     - Ensure the layout is clean and easy to read at a glance. """
 
-
     if not client or not os.getenv("GROQ_API_KEY"):
         return "⚠️ Groq API Key is missing or invalid. Please check your .env file."
 
@@ -86,4 +69,3 @@ def answer_question(question, contract_clauses):
         if "401" in str(e) or "invalid_api_key" in str(e).lower():
             return "🔐 Your Groq API Key is invalid. Please generate a new one from the Groq console and update your .env file."
         return f"❌ Sorry, I encountered an error while thinking: {str(e)}"
-
