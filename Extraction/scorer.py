@@ -57,12 +57,13 @@ def score_contract(clauses):
     # Pull out the most dangerous clauses (high risk only)
     red_flags = [
         {
-            'title':          c.get('title', ''),
+            'title':          c.get('type', 'Unknown Clause').replace('_', ' ').title(),
             'type':           c.get('type', ''),
-            'ai_explanation': c.get('ai_explanation', c.get('plain_english', '')),
+            'ai_explanation': c.get('ai_explanation', c.get('plain_english', 'High risk detected.')),
         }
         for c in clauses if c.get('risk_level') == 'high'
     ]
+
 
     # Frontend expects 'score' to be the RISK score (0-100)
     # Risk Score = 100 - Safety Score
