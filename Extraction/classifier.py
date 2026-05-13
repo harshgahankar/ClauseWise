@@ -29,49 +29,68 @@ RISK_LEVELS = {
     'general':           'low',
 }
 
-def detect_type_llm(text):
-    """Use Groq to classify the clause type to save RAM."""
-    if not os.getenv("GROQ_API_KEY"):
-        return "general", 100.0
-
-    prompt = f"""Classify the following legal clause into ONE of these categories: 
-    {', '.join(label_map.values())}
-    
-    Clause Text: {text[:500]}
-    
-    Return ONLY the category name."""
-
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            max_tokens=10,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        prediction = response.choices[0].message.content.strip().lower()
-        
-        # Match with label map
-        for val in label_map.values():
-            if val.lower() in prediction:
-                return val, 95.0
-        return "general", 80.0
-    except:
-        return "general", 50.0
-
-def classify_clause(clause):
-    """Adds classification and risk level to a single clause."""
-    text = clause.get('full_text', '')
-    
-    # Using LLM classification to save RAM (avoiding BERT/Torch)
-    clause_type, confidence = detect_type_llm(text)
-    
-    clause['type'] = clause_type
-    clause['confidence'] = confidence
-    clause['risk_level'] = RISK_LEVELS.get(clause_type, 'low')
-    
-    return clause
-
 def classify_all(clauses):
-    """Classifies a list of clauses."""
-    # To save time/API calls, we only classify the first few or use a faster method
-    # For now, let's just do all of them as it's a small number usually
-    return [classify_clause(c) for c in clauses]
+    """Classifies a list of clauses in batches using Groq LLM to save RAM and avoid rate limits."""
+    if not clauses or not os.getenv("GROQ_API_KEY"):
+        return clauses
+
+    # Batching to stay under rate limits (RPM)
+    BATCH_SIZE = 5
+    results = []
+    
+    for i in range(0, len(clauses), BATCH_SIZE):
+        batch = clauses[i:i + BATCH_SIZE]
+        
+        # Prepare a single prompt for the batch
+        batch_texts = "\n---\n".join([f"ID {j}: {c.get('full_text', '')[:300]}" for j, c in enumerate(batch)])
+        
+        prompt = f"""Classify these {len(batch)} legal clauses into ONE of these categories:
+        {', '.join(label_map.values())}
+        
+        Return a JSON list of objects: [{{"id": index, "category": "category_name"}}]
+        
+        Clauses:
+        {batch_texts}"""
+
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                max_tokens=500,
+                response_format={"type": "json_object"},
+                messages=[{"role": "user", "content": prompt + "\nRespond with a JSON object containing a 'results' array."}]
+            )
+            
+            data = json.loads(response.choices[0].message.content)
+            batch_results = data.get('results', [])
+            
+            for j, clause in enumerate(batch):
+                # Try to find matching result by index or default
+                pred = "general"
+                try:
+                    res = next((r for r in batch_results if r.get('id') == j), {})
+                    pred = res.get('category', 'general').lower()
+                except:
+                    pass
+                
+                # Validation
+                final_type = "general"
+                for val in label_map.values():
+                    if val.lower() in pred:
+                        final_type = val
+                        break
+                
+                clause['type'] = final_type
+                clause['confidence'] = 90.0
+                clause['risk_level'] = RISK_LEVELS.get(final_type, 'low')
+                results.append(clause)
+                
+        except Exception as e:
+            print(f"Classification Batch Error: {e}")
+            # Fallback for the whole batch
+            for clause in batch:
+                clause['type'] = 'general'
+                clause['confidence'] = 50.0
+                clause['risk_level'] = 'low'
+                results.append(clause)
+                
+    return results

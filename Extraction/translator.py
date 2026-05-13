@@ -1,5 +1,6 @@
-from groq import Groq
 import os
+import json
+from groq import Groq
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,78 +14,78 @@ except Exception as e:
     print(f"Error initializing Groq client in translator: {e}")
     client = None
 
+def translate_all(clauses):
+    """Explains a list of clauses in batches using Groq to avoid rate limits."""
+    if not clauses or not client:
+        return clauses
 
+    BATCH_SIZE = 3  # Smaller batch for detailed explanations
+    results = []
+    
+    for i in range(0, len(clauses), BATCH_SIZE):
+        batch = clauses[i:i + BATCH_SIZE]
+        
+        batch_input = "\n---\n".join([
+            f"Clause {j}:\nText: {c.get('full_text', '')[:1000]}\nType: {c.get('type', '')}" 
+            for j, c in enumerate(batch)
+        ])
+        
+        prompt = f"""You are a friendly legal assistant. Explain these {len(batch)} contract clauses in super simple "plain English".
+        
+        Instructions for EACH clause:
+        1. Explain what it means in simple words (ELI5).
+        2. **Highlight risky parts using bold text.**
+        3. Use 1-2 emojis.
+        4. State clearly what the user might lose or agree to.
+        
+        Return a JSON object with a 'results' array: [{{"id": index, "explanation": "your explanation"}}]
+        
+        Clauses to explain:
+        {batch_input}"""
+
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                max_tokens=1000,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "You are a helpful legal expert who simplifies contracts into JSON format."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            data = json.loads(response.choices[0].message.content)
+            batch_explanations = data.get('results', [])
+            
+            for j, clause in enumerate(batch):
+                explanation = "No explanation generated."
+                try:
+                    res = next((r for r in batch_explanations if r.get('id') == j), {})
+                    explanation = res.get('explanation', "No explanation generated.")
+                except:
+                    pass
+                
+                results.append({**clause, 'ai_explanation': explanation})
+                
+        except Exception as e:
+            print(f"Translation Batch Error: {e}")
+            # Fallback
+            for clause in batch:
+                results.append({**clause, 'ai_explanation': 'Could not generate AI explanation due to rate limits. Please try again.'})
+                
+    return results
 
 def translate_clause(clause_text, clause_type, risk_level):
-    """Send one clause to Groq (Llama 3), get back a plain English explanation."""
-
-    prompt = f"""You are a friendly legal assistant helping everyday people understand contracts.
-    Explain this like I'm 5 years old.
-
-    A user has found this clause:
-    ---
-    {clause_text}
-    ---
-
-    Clause Type: {clause_type} | Risk: {risk_level}
-
-    Your job:
-    1. Explain what this clause ACTUALLY means in very simple words. Use 1-2 emojis.
-    2. **Highlight risky or important parts using bold text (e.g., **you will lose money**).**
-    3. State clearly what the user might LOSE or AGREE TO.
-    4. Give one super-simple tip or warning.
-
-    Keep it friendly, short (under 70 words), and use NO legal jargon. """
-
-
-    if not client or not GROQ_API_KEY:
-        return "⚠️ Groq API Key missing."
-
+    """Fallback for single clause explanation."""
+    # (Kept for compatibility if needed elsewhere)
+    if not client: return "⚠️ Groq client not initialized."
     try:
+        prompt = f"Explain this {clause_type} clause ({risk_level} risk) simply: {clause_text[:500]}"
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             max_tokens=200,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a friendly legal assistant who explains contracts in super simple English with emojis."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Translator Groq Error: {e}")
-        return f"Could not generate AI explanation. (Error: {str(e)[:50]}...)"
-
-
-
-def translate_all(clauses):
-    results = []
-    for clause in clauses:
-        try:
-            explanation = translate_clause(
-                clause.get('full_text', ''),
-                clause.get('type', 'general'),
-                clause.get('risk_level', 'low')
-            )
-            # ── Self-healing ──────────────────────────────────────────────────
-            try:
-                from rag_healer import is_bad_explanation, heal_explanation
-                if is_bad_explanation(explanation):
-                    explanation = heal_explanation(
-                        clause.get('full_text', ''),
-                        clause.get('type', 'general'),
-                        clause.get('risk_level', 'low'),
-                        explanation
-                    )
-            except Exception:
-                pass
-        except Exception as e:
-            explanation = clause.get('plain_english', 'Could not generate explanation.')
-
-        results.append({**clause, 'ai_explanation': explanation})
-    return results
+        return f"Error: {str(e)}"
