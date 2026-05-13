@@ -151,8 +151,5 @@ def rag_stats():
     return jsonify(get_store_stats())
 
 if __name__ == '__main__':
-    print("\n* Contract Analyzer - full pipeline ready")
-    print("* POST /analyze-pdf - upload a PDF contract")
-    print("* POST /report      - send raw text")
-    print("* POST /chat        - ask questions about the contract\n")
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, port=port, host='0.0.0.0')
