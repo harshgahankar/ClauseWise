@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Mail, MessageSquare, FileText, Shield, Zap, Users } from 'lucide-react';
 import './HelpPage.css';
@@ -58,6 +59,46 @@ function FAQItem({ item }) {
 }
 
 export default function HelpPage() {
+  const { analysisResult } = useApp();
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', text: "Hi! I'm the ClauseWise Support Bot. How can I help you today?" }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+
+  const handleChat = async () => {
+    if (!chatInput.trim()) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput('');
+
+    setChatMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+    setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
+
+    try {
+      const response = await fetch('http://localhost:5000/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: userMessage,
+          clauses: analysisResult?.clauses || [] 
+        })
+      });
+
+      const data = await response.json();
+
+      setChatMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: 'assistant', text: data.answer || "I couldn't process that right now." }
+      ]);
+    } catch (err) {
+      setChatMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: 'assistant', text: 'Sorry, I could not reach the server. Make sure your backend is running.' }
+      ]);
+    }
+  };
+
   return (
     <div className="help-page">
       <div className="help-hero">
@@ -108,7 +149,12 @@ export default function HelpPage() {
                   <a href={`mailto:${opt.action}`} className="support-card__link">{opt.action}</a>
                 )}
                 {opt.type === 'button' && (
-                  <button className="support-card__btn">{opt.action}</button>
+                  <button 
+                    className="support-card__btn" 
+                    onClick={() => opt.title === 'Live Chat' && setChatOpen(true)}
+                  >
+                    {opt.action}
+                  </button>
                 )}
                 {opt.type === 'link' && (
                   <span className="support-card__link">{opt.action}</span>
@@ -126,6 +172,37 @@ export default function HelpPage() {
           </div>
           <Link to="/scan" className="help-cta__btn">Start Free Scan →</Link>
         </div>
+        {/* Chat overlay */}
+        {chatOpen && (
+          <div className="chat-overlay" onClick={(e) => e.target === e.currentTarget && setChatOpen(false)}>
+            <div className="chat-modal">
+              <div className="chat-modal__header">
+                <div>
+                  <div className="chat-modal__title">Live Chat</div>
+                  <div className="chat-modal__sub">Talk to our ClauseWise bot</div>
+                </div>
+                <button className="chat-modal__close" onClick={() => setChatOpen(false)}>✕</button>
+              </div>
+              <div className="chat-messages">
+                {chatMessages.map((m, i) => (
+                  <div key={i} className={`chat-message chat-message--${m.role}`}>
+                    {m.text}
+                  </div>
+                ))}
+              </div>
+              <div className="chat-input-row">
+                <input
+                  className="chat-input"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleChat()}
+                  placeholder="Type a message…"
+                />
+                <button className="chat-send" onClick={handleChat}>Send</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

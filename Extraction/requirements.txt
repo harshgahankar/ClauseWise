@@ -11,4 +11,5 @@ chromadb
 sentence-transformers
 loguru
 pdfplumber
+python-dotenv
 python-docx

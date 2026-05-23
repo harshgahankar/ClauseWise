@@ -24,7 +24,8 @@ def answer_question(question, contract_clauses):
         if clause_id in mentioned_numbers:
             boost = 1.0  # Force it to the top
             
-        c_vec      = np.array(embed(clause.get('full_text', '')))
+        text_to_embed = clause.get('full_text') or clause.get('originalText', '')
+        c_vec      = np.array(embed(text_to_embed))
         similarity = float(np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
         scored.append((similarity + boost, clause))
 
@@ -33,35 +34,36 @@ def answer_question(question, contract_clauses):
     top_clauses = [c for _, c in scored[:20]]
 
     context = "\n\n".join([
-        f"Clause ID: {c.get('id', '')} | Title: {c.get('title', '')} | Risk: {c.get('risk_level', '')}\n"
-        f"Full Text: {c.get('full_text', '')[:1500]}\n"
-        f"Pre-Analysis: {c.get('ai_explanation') or c.get('plain_english', '')}"
+        f"Clause ID: {c.get('id', '')} | Title: {c.get('title', '')} | Risk: {c.get('risk_level') or c.get('risk', '')}\n"
+        f"Full Text: {(c.get('full_text') or c.get('originalText', ''))[:1500]}\n"
+        f"Pre-Analysis: {c.get('ai_explanation') or c.get('plain_english') or c.get('plainEnglish', '')}"
         for c in top_clauses
     ])
 
-    prompt = f"""You are a friendly Legal Assistant. Your goal is to explain contract clauses so clearly that even a child could understand.
+    prompt = f"""You are a professional corporate lawyer assisting a client with a contract analysis. 
 
-Available Context:
+Available Context from the Contract:
 {context}
 
 User Question: {question}
 
 Instructions:
-- Provide a simple, clear, and very easy-to-understand answer.
-- Use emojis to make the response friendly and engaging (e.g., ✅, ⚠️, 🚩).
-- Use clear bullet points on NEW LINES for lists (e.g., - Item 1).
-- Use double new lines between paragraphs for clear spacing.
-- Be decisive. If a clause is safe, say so. If it has a risk, explain it simply.
-- Avoid all legal jargon and complex words.
-- Keep the response under 80 words.
-- Use "explain like I'm five" (ELI5) logic.
-- Ensure the layout is clean and easy to read at a glance. """
+- Answer the user's question directly and professionally based on the provided context.
+- If the user asks a general question (e.g., "is this document risky?"), synthesize the overall risk from the context provided and highlight the main concerns.
+- If the user's input is strictly a greeting (e.g., "hello", "hi", "hlo"), greet them professionally and ask how you may assist them with the contract. Do not analyze clauses unless asked.
+- Provide a concise, clear, and authoritative legal analysis.
+- Use clear bullet points on NEW LINES for lists.
+- Be decisive. Identify risks clearly but maintain a professional tone.
+- Do not use emojis.
+- Avoid unnecessarily dense legal jargon, but use standard professional terminology.
+- Keep the response under 150 words.
+- Ensure the layout is clean and easy to read. """
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         max_tokens=300,
         messages=[
-            {"role": "system", "content": "You are a friendly legal expert who simplifies complex contracts with total clarity and uses helpful emojis."},
+            {"role": "system", "content": "You are a highly experienced and professional corporate lawyer providing clear, authoritative, and concise legal advice regarding contracts."},
             {"role": "user",   "content": prompt}
         ]
     )
