@@ -4,6 +4,7 @@ import { Download, ChevronDown, ChevronUp, ArrowLeft, MessageSquare, Columns } f
 import { useApp } from '../../context/AppContext';
 import { RISK_COLORS } from '../../utils/mockData';
 import { generatePDFReport } from '../../utils/reportGenerator';
+import API_URL from '../../config';
 import './AnalysisPage.css';
 
 const RISK_ICON = {
@@ -150,7 +151,7 @@ export default function AnalysisPage() {
   setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
 
   try {
-    const response = await fetch('http://localhost:5000/chat', {
+    const response = await fetch(`${API_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

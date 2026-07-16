@@ -1,22 +1,28 @@
-import chromadb
-import requests
-import os
 import uuid
 
 EMBED_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
-EMBED_HEADERS = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
 
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection    = chroma_client.get_or_create_collection(
-    name="clauses",
-    metadata={"heuristic": "cosine"}
-)
+_client = None
+_collection = None
+
+def _get_collection():
+    global _client, _collection
+    if _collection is None:
+        import chromadb
+        import os
+        _client = chromadb.EphemeralClient()
+        _collection = _client.get_or_create_collection(name="clauses")
+    return _collection
 
 def embed(text):
-    response = requests.post(EMBED_API_URL, headers=EMBED_HEADERS, json={"inputs": text}, timeout=30)
+    import requests
+    import os
+    headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+    response = requests.post(EMBED_API_URL, headers=headers, json={"inputs": text}, timeout=30)
     return response.json()
 
 def store_clause(clause_text, clause_type, risk_level, plain_english, contract_id=None):
+    collection = _get_collection()
     collection.add(
         ids        = [str(uuid.uuid4())],
         embeddings = [embed(clause_text)],
@@ -30,6 +36,7 @@ def store_clause(clause_text, clause_type, risk_level, plain_english, contract_i
     )
 
 def retrieve_similar(clause_text, n=3):
+    collection = _get_collection()
     count = collection.count()
     if count == 0:
         return []
@@ -58,7 +65,9 @@ def store_all_clauses(clauses, contract_id=None):
             plain_english = clause.get('plain_english', ''),
             contract_id   = contract_id,
         )
+    collection = _get_collection()
     print(f"* Stored {len(clauses)} clauses (total in DB: {collection.count()})")
 
 def get_store_stats():
+    collection = _get_collection()
     return {'total_clauses_stored': collection.count()}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Mail, MessageSquare, FileText, Shield, Zap, Users } from 'lucide-react';
+import API_URL from '../../config';
 import './HelpPage.css';
 
 const FAQS = [
@@ -76,7 +77,7 @@ export default function HelpPage() {
     setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
 
     try {
-      const response = await fetch('http://localhost:5000/support-chat', {
+      const response = await fetch(`${API_URL}/support-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: userMessage })

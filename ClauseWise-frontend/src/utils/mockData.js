@@ -69,7 +69,8 @@ export const RISK_COLORS = {
 };
 
 // ── NEW: converts your backend response → your frontend shape ─────────────────
-const BACKEND_URL = 'http://localhost:5000';
+import API_URL from '../config';
+const BACKEND_URL = API_URL;
 
 function mapRiskLevel(backendLevel) {
   if (backendLevel === 'high')   return 'unsafe';
