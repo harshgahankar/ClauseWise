@@ -1,35 +1,40 @@
 import os
-import numpy as np
-from groq import Groq
-from rag_store import embed
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        from groq import Groq
+        _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    return _client
+
+def _embed(text):
+    from rag_store import embed
+    return embed(text)
 
 def answer_question(question, contract_clauses):
     if not contract_clauses:
         return "Please upload and analyze a contract first before asking questions."
 
-    # 1. Check for explicit clause numbers in the question (e.g., "6", "clause 6", "section 6")
     import re
-    # Look for stand-alone numbers or numbers prefixed by clause/section/§
+    import numpy as np
+
     mentioned_numbers = re.findall(r'(?:\bclause\b|\bsection\b|§)?\s*(\d+)(?:\.|\b)', question.lower())
-    
-    # 2. Score every clause by semantic similarity
-    q_vec   = np.array(embed(question))
+
+    q_vec   = np.array(_embed(question))
     scored  = []
     for clause in contract_clauses:
-        # Boost score if the clause ID or number matches what the user asked for
         boost = 0.0
         clause_id = str(clause.get('id', ''))
         if clause_id in mentioned_numbers:
-            boost = 1.0  # Force it to the top
-            
+            boost = 1.0
+
         text_to_embed = clause.get('full_text') or clause.get('originalText', '')
-        c_vec      = np.array(embed(text_to_embed))
+        c_vec      = np.array(_embed(text_to_embed))
         similarity = float(np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
         scored.append((similarity + boost, clause))
 
-    # 3. Take the 20 most relevant clauses (increased to cover larger contracts)
     scored.sort(key=lambda x: x[0], reverse=True)
     top_clauses = [c for _, c in scored[:20]]
 
@@ -59,6 +64,7 @@ Instructions:
 - Keep the response under 500 words.
 - Ensure the layout is clean and easy to read. """
 
+    client = _get_client()
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         max_tokens=700,
@@ -83,6 +89,7 @@ Instructions:
 - Do not use emojis.
 - Keep the response under 200 words."""
 
+    client = _get_client()
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         max_tokens=300,
@@ -91,4 +98,4 @@ Instructions:
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content.strip()
