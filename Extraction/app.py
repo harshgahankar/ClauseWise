@@ -81,12 +81,15 @@ def report():
     translated = translate_all(classified)
     final      = score_contract(translated)
     
-    # Store clauses for RAG
     contract_id = str(uuid.uuid4())
-    store_all_clauses(translated, contract_id=contract_id)
+    try:
+        store_all_clauses(translated, contract_id=contract_id)
+    except Exception as e:
+        print(f"  RAG store skipped: {e}")
     final['contract_id'] = contract_id
     
     return jsonify(final)
+
 
 @app.route('/analyze-pdf', methods=['POST'])
 def analyze_pdf():
@@ -111,12 +114,13 @@ def analyze_pdf():
     translated = translate_all(classified)
     final      = score_contract(translated)
     
-    # Store clauses for RAG
     contract_id = str(uuid.uuid4())
-    store_all_clauses(translated, contract_id=contract_id)
+    try:
+        store_all_clauses(translated, contract_id=contract_id)
+    except Exception as e:
+        print(f"  RAG store skipped: {e}")
     final['contract_id'] = contract_id
     
-    # Optional: Include full text for debugging if needed
     final['extracted_text'] = " ".join([c['full_text'] for c in clauses])
 
     return jsonify(final)
