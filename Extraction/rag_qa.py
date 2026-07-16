@@ -56,15 +56,39 @@ Instructions:
 - Be decisive. Identify risks clearly but maintain a professional tone.
 - Do not use emojis.
 - Avoid unnecessarily dense legal jargon, but use standard professional terminology.
-- Keep the response under 150 words.
+- Keep the response under 500 words.
 - Ensure the layout is clean and easy to read. """
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        max_tokens=700,
+        messages=[
+            {"role": "system", "content": "You are a highly experienced and professional corporate lawyer providing clear, authoritative, and concise legal advice regarding contracts."},
+            {"role": "user",   "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content.strip()
+
+
+def support_answer(question):
+    prompt = f"""You are a helpful customer support assistant for ClauseWise, an AI-powered contract analysis platform.
+
+User Question: {question}
+
+Instructions:
+- Answer the user's question helpfully and professionally about the ClauseWise platform, its features, or general troubleshooting.
+- If they ask about legal advice, clarify that ClauseWise is an AI assistant and not a substitute for a licensed attorney.
+- If you don't know the answer, suggest they email support@clausewise.com for further assistance.
+- Keep responses concise and friendly.
+- Do not use emojis.
+- Keep the response under 200 words."""
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         max_tokens=300,
         messages=[
-            {"role": "system", "content": "You are a highly experienced and professional corporate lawyer providing clear, authoritative, and concise legal advice regarding contracts."},
-            {"role": "user",   "content": prompt}
+            {"role": "system", "content": "You are a helpful customer support assistant for the ClauseWise platform."},
+            {"role": "user", "content": prompt}
         ]
     )
     return response.choices[0].message.content.strip()

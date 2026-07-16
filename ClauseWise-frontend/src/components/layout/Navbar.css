@@ -23,7 +23,7 @@
   height: 64px;
   display: flex;
   align-items: center;
-  gap: 2rem;
+  position: relative;
 }
 
 .navbar__brand {
@@ -63,7 +63,9 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  margin: 0 auto;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .navbar__link {

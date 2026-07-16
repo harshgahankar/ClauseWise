@@ -3,20 +3,17 @@ import torch
 import os
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ── Load trained model once at startup ───────────────────────────────────────
-# Get absolute path to the model directory
+# ── Load trained model from Hugging Face Hub ──────────────────────────────────
+HF_MODEL = "harsh-101/clause-bert-classifier"
+
+print(f"* Loading BERT classifier from Hugging Face Hub ({HF_MODEL})...")
+tokenizer = AutoTokenizer.from_pretrained(HF_MODEL)
+model     = AutoModelForSequenceClassification.from_pretrained(HF_MODEL)
+model.eval()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "bert_clause_model")
-LABEL_MAP_PATH = os.path.join(BASE_DIR, "label_map.json")
-
-print(f"* Loading trained BERT classifier from {MODEL_DIR}...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-model     = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
-model.eval()  # inference mode, not training mode
-
-with open(LABEL_MAP_PATH, 'r') as f:
+with open(os.path.join(BASE_DIR, "label_map.json")) as f:
     label_map = json.load(f)
-    # convert string keys back to integers
     label_map = {int(k): v for k, v in label_map.items()}
 
 print(f"* BERT classifier ready - {len(label_map)} clause types")

@@ -9,7 +9,7 @@ from classifier import classify_all
 from translator import translate_all
 from scorer import score_contract
 from rag_store import store_all_clauses, get_store_stats
-from rag_qa import answer_question
+from rag_qa import answer_question, support_answer
 import uuid
 
 app = Flask(__name__)
@@ -127,6 +127,14 @@ def chat():
     if not data or 'question' not in data:
         return jsonify({'error': 'Send JSON with "question" and "clauses"'}), 400
     answer = answer_question(data['question'], data.get('clauses', []))
+    return jsonify({'answer': answer})
+
+@app.route('/support-chat', methods=['POST'])
+def support_chat():
+    data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({'error': 'Send JSON with "question"'}), 400
+    answer = support_answer(data['question'])
     return jsonify({'answer': answer})
 
 @app.route('/rag-stats')

@@ -10,22 +10,52 @@ HEADING_PATTERNS = [
     r'^[A-Z][A-Z\s]{4,40}$',      # matches: PAYMENT TERMS (all caps line)
 ]
 
+DOCUMENT_TITLE_KEYWORDS = [
+    'agreement', 'contract', 'addendum', 'amendment',
+    'certificate', 'license', 'policy', 'notice',
+    'waiver', 'release', 'terms', 'consent',
+    'affidavit', 'declaration', 'understanding',
+    'indenture', 'memorandum', 'stipulation',
+]
+
+SIGNATURE_START_PATTERNS = [
+    r'^IN\s+WITNESS\s+WHEREOF',
+    r'^SIGN(?:ED|ATURE)\s*(?:PAGE|BLOCK)?',
+    r'^EXECUTED\s+(?:this|as\s+of)',
+    r'^\[?\s*(?:COMPANY|BORROWER|LENDER|EMPLOYER|EMPLOYEE|CONTRACTOR|CLIENT|VENDOR)\s*\]?\s*$',
+    r'^By:\s*_{5,}',
+    r'^_{10,}\s*$',
+    r'^Date[d]?\s*:?\s*_{0,}$',
+    r'^\(?(?:CORPORATE\s+)?SEAL\)?\s*$',
+    r'^Notary\s+Public',
+    r'^(Name|Title|Witness|Attest)\s*:',
+    r'^\[?Signature\s*(?:Block)?\]?',
+]
+
+
+def is_document_title(line):
+    lower = line.lower().strip()
+    for kw in DOCUMENT_TITLE_KEYWORDS:
+        if kw in lower:
+            return True
+    return False
+
+
+def is_signature_line(line):
+    for pattern in SIGNATURE_START_PATTERNS:
+        if re.match(pattern, line):
+            return True
+    return False
+
+
 def is_heading(line):
-    """Check if a line matches any common contract heading patterns."""
     for pattern in HEADING_PATTERNS:
         if re.match(pattern, line):
             return True
     return False
 
-def extract_clauses(pdf_input):
-    """
-    Extracts clauses from either PDF bytes or raw text.
-    Returns a list of dictionaries, each representing a clause.
-    """
-    import fitz
-    import re
 
-    # 1. Get raw text from input
+def extract_clauses(pdf_input):
     if isinstance(pdf_input, bytes):
         try:
             pdf = fitz.open(stream=pdf_input, filetype="pdf")
@@ -41,20 +71,26 @@ def extract_clauses(pdf_input):
     else:
         return []
 
-    # 2. Pre-process text
     text = text.replace('\xa0', ' ')
     lines = text.split('\n')
 
     clauses = []
     current_clause = None
+    in_signature_block = False
+    first_heading_seen = False
 
-    # 3. Split text into clauses based on headings
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
         if is_heading(line):
+            if not first_heading_seen and is_document_title(line):
+                continue
+
+            first_heading_seen = True
+            in_signature_block = False
+
             if current_clause is not None:
                 clauses.append(current_clause)
 
@@ -64,22 +100,25 @@ def extract_clauses(pdf_input):
                 'body': [],
                 'full_text': line
             }
+        elif is_signature_line(line):
+            in_signature_block = True
+        elif in_signature_block:
+            continue
         elif current_clause is not None:
             current_clause['body'].append(line)
             current_clause['full_text'] += ' ' + line
         else:
-            # If no heading found yet, create an initial generic clause
             current_clause = {
                 'id': 1,
                 'title': "Introduction / General Terms",
                 'body': [line],
                 'full_text': line
             }
+            first_heading_seen = True
 
     if current_clause is not None:
         clauses.append(current_clause)
 
-    # 4. If still no clauses found, return the whole text as one clause
     if not clauses and text.strip():
         clauses.append({
             'id': 1,

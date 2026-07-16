@@ -2,7 +2,8 @@ from groq import Groq
 import os
 
 # API Key - using environment variable for security
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=GROQ_API_KEY)
 
 def translate_clause(clause_text, clause_type, risk_level):
     """Send one clause to Groq (Llama 3), get back a plain English explanation."""

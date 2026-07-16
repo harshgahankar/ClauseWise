@@ -76,13 +76,10 @@ export default function HelpPage() {
     setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
 
     try {
-      const response = await fetch('http://localhost:5000/chat', {
+      const response = await fetch('http://localhost:5000/support-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: userMessage,
-          clauses: analysisResult?.clauses || [] 
-        })
+        body: JSON.stringify({ question: userMessage })
       });
 
       const data = await response.json();

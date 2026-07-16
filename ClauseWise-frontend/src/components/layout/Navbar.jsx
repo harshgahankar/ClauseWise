@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Scale, FileText, HelpCircle, User, Plus } from 'lucide-react';
+import { Scale, FileText, HelpCircle, Plus } from 'lucide-react';
 import './Navbar.css';
 
 export default function Navbar() {
@@ -42,14 +42,6 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="navbar__actions">
-          <Link to="/scan" className="navbar__cta">
-            Start Free Scan
-          </Link>
-          <button className="navbar__avatar" aria-label="Account">
-            <User size={16} />
-          </button>
-        </div>
       </div>
     </header>
   );
