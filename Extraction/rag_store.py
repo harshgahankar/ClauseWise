@@ -1,11 +1,11 @@
 import chromadb
-from sentence_transformers import SentenceTransformer
+import requests
+import os
 import uuid
 
-print("* Loading embedding model...")
-embedder = SentenceTransformer('all-MiniLM-L6-v2')  # free, fast, no API needed
+EMBED_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+EMBED_HEADERS = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
 
-# persists to disk — survives server restarts
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection    = chroma_client.get_or_create_collection(
     name="clauses",
@@ -13,7 +13,8 @@ collection    = chroma_client.get_or_create_collection(
 )
 
 def embed(text):
-    return embedder.encode(text).tolist()
+    response = requests.post(EMBED_API_URL, headers=EMBED_HEADERS, json={"inputs": text}, timeout=30)
+    return response.json()
 
 def store_clause(clause_text, clause_type, risk_level, plain_english, contract_id=None):
     collection.add(

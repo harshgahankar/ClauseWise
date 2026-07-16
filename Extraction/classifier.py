@@ -1,24 +1,18 @@
 import json
-import torch
 import os
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import requests
 
-# ── Load trained model from Hugging Face Hub ──────────────────────────────────
 HF_MODEL = "harsh-101/clause-bert-classifier"
-
-print(f"* Loading BERT classifier from Hugging Face Hub ({HF_MODEL})...")
-tokenizer = AutoTokenizer.from_pretrained(HF_MODEL)
-model     = AutoModelForSequenceClassification.from_pretrained(HF_MODEL)
-model.eval()
+API_URL  = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+HEADERS  = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(BASE_DIR, "label_map.json")) as f:
     label_map = json.load(f)
     label_map = {int(k): v for k, v in label_map.items()}
 
-print(f"* BERT classifier ready - {len(label_map)} clause types")
+reverse_label_map = {v: k for k, v in label_map.items()}
 
-# ── Risk levels ──────────────────────────────────────────────
 RISK_LEVELS = {
     'auto_renewal':       {'level': 'high',   'color': 'red'},
     'liability_waiver':   {'level': 'high',   'color': 'red'},
@@ -34,41 +28,41 @@ RISK_LEVELS = {
 }
 
 PLAIN_ENGLISH = {
-    'auto_renewal':       'Contract renews automatically unless cancelled 🔄',
-    'liability_waiver':   'Company not responsible for damages or losses 🛡️',
-    'arbitration':        'You waive your right to sue in court ⚖️',
-    'data_selling':       'Your data may be sold or shared with third parties 📂',
-    'unilateral_changes': 'Company can change terms without notice 📝',
-    'exit_penalty':       'Early termination fees apply 💸',
-    'price_escalation':   'Price can increase periodically 📈',
-    'jurisdiction':       'Disputes handled in another state or country 🏛️',
-    'ip_ownership':       'Company owns content you create on the platform 🎨',
-    'notice_period':      'Long notice period required to cancel ⏳',
-    'general':            'Standard clause — review for context 📄',
+    'auto_renewal':       'Contract renews automatically unless cancelled.',
+    'liability_waiver':   'Company not responsible for damages or losses.',
+    'arbitration':        'You waive your right to sue in court.',
+    'data_selling':       'Your data may be sold or shared with third parties.',
+    'unilateral_changes': 'Company can change terms without notice.',
+    'exit_penalty':       'Early termination fees apply.',
+    'price_escalation':   'Price can increase periodically.',
+    'jurisdiction':       'Disputes handled in another state or country.',
+    'ip_ownership':       'Company owns content you create on the platform.',
+    'notice_period':      'Long notice period required to cancel.',
+    'general':            'Standard clause — review for context.',
 }
 
-# ── Predict clause type using BERT ────────────────────────────────────────────
 def detect_type(text):
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=128,
-        padding=True
-    )
+    try:
+        response = requests.post(API_URL, headers=HEADERS, json={"inputs": text}, timeout=30)
+        result = response.json()
 
-    with torch.no_grad():                        # no gradient needed for inference
-        outputs = model(**inputs)
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
+            predictions = result[0]
+            top = max(predictions, key=lambda x: x['score'])
+            label_str = top['label']
+            confidence = top['score'] * 100
 
-    logits      = outputs.logits
-    predicted_id = torch.argmax(logits, dim=1).item()
-    clause_type  = label_map.get(predicted_id, "general")
+            if label_str.startswith('LABEL_'):
+                idx = int(label_str.split('_')[1])
+                clause_type = label_map.get(idx, "general")
+            else:
+                clause_type = reverse_label_map.get(label_str, "general")
 
-    # get confidence score (0-100%)
-    probabilities = torch.softmax(logits, dim=1)
-    confidence    = probabilities[0][predicted_id].item()
+            return clause_type, round(confidence, 1)
+    except Exception as e:
+        print(f"  HF API error: {e}")
 
-    return clause_type, round(confidence * 100, 1)
+    return "general", 0.0
 
 def classify_all(clauses):
     return [classify_clause(c) for c in clauses]
@@ -77,7 +71,6 @@ def classify_clause(clause):
     full_text         = clause.get('full_text', '')
     clause_type, conf = detect_type(full_text)
 
-    # ── Self-healing ──────────────────────────────────────────────────────────
     was_healed = False
     try:
         from rag_healer import heal_classification
@@ -88,11 +81,11 @@ def classify_clause(clause):
     risk = RISK_LEVELS.get(clause_type, RISK_LEVELS['general'])
     return {
         **clause,
-        'type':        clause_type,
-        'confidence':  conf,
-        'self_healed': was_healed,
-        'risk_level':  risk['level'],
-        'flag_color':  risk['color'],
+        'type':         clause_type,
+        'confidence':   conf,
+        'self_healed':  was_healed,
+        'risk_level':   risk['level'],
+        'flag_color':   risk['color'],
         'plain_english': PLAIN_ENGLISH.get(clause_type, ''),
-        'is_risky':    risk['level'] in ('high', 'medium'),
+        'is_risky':     risk['level'] in ('high', 'medium'),
     }
