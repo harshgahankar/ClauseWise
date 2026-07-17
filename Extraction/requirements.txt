@@ -10,3 +10,5 @@ python-dotenv
 python-docx
 loguru
 requests
+torch
+transformers

@@ -7,11 +7,13 @@ API_URL  = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 HEADERS  = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "bert_clause_model")
+
 with open(os.path.join(BASE_DIR, "label_map.json")) as f:
     label_map = json.load(f)
     label_map = {int(k): v for k, v in label_map.items()}
 
-reverse_label_map = {v: k for k, v in label_map.items()}
+KNOWN_TYPES = set(label_map.values()) | {'general'}
 
 RISK_LEVELS = {
     'auto_renewal':       {'level': 'high',   'color': 'red'},
@@ -41,27 +43,52 @@ PLAIN_ENGLISH = {
     'general':            'Standard clause — review for context.',
 }
 
+def _hf_detect(text):
+    response = requests.post(API_URL, headers=HEADERS, json={"inputs": text}, timeout=30)
+    result = response.json()
+    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
+        predictions = result[0]
+        top = max(predictions, key=lambda x: x['score'])
+        label_str = top['label']
+        confidence = round(top['score'] * 100, 1)
+        if label_str.startswith('LABEL_'):
+            idx = int(label_str.split('_')[1])
+            return label_map.get(idx, "general"), confidence
+        if label_str in KNOWN_TYPES:
+            return label_str, confidence
+    return None, 0.0
+
+_tokenizer = None
+_model = None
+
+def _local_detect(text):
+    global _tokenizer, _model
+    if _model is None:
+        print("  Loading local BERT model (fallback)...")
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+        _model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
+        _model.eval()
+        print("  Local model loaded.")
+    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    import torch
+    with torch.no_grad():
+        outputs = _model(**inputs)
+    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+    confidence, idx = torch.max(probs, dim=-1)
+    return label_map.get(int(idx), "general"), round(float(confidence) * 100, 1)
+
 def detect_type(text):
     try:
-        response = requests.post(API_URL, headers=HEADERS, json={"inputs": text}, timeout=30)
-        result = response.json()
-
-        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
-            predictions = result[0]
-            top = max(predictions, key=lambda x: x['score'])
-            label_str = top['label']
-            confidence = top['score'] * 100
-
-            if label_str.startswith('LABEL_'):
-                idx = int(label_str.split('_')[1])
-                clause_type = label_map.get(idx, "general")
-            else:
-                clause_type = reverse_label_map.get(label_str, "general")
-
-            return clause_type, round(confidence, 1)
+        clause_type, confidence = _hf_detect(text)
+        if clause_type is not None:
+            return clause_type, confidence
     except Exception as e:
-        print(f"  HF API error: {e}")
-
+        print(f"  HF API error (will try local model): {e}")
+    try:
+        return _local_detect(text)
+    except Exception as e:
+        print(f"  Local model error: {e}")
     return "general", 0.0
 
 def classify_all(clauses):
