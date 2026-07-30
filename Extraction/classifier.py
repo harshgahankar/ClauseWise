@@ -84,11 +84,14 @@ def detect_type(text):
         if clause_type is not None:
             return clause_type, confidence
     except Exception as e:
-        print(f"  HF API error (will try local model): {e}")
-    try:
-        return _local_detect(text)
-    except Exception as e:
-        print(f"  Local model error: {e}")
+        print(f"  HF API error: {e}")
+    if os.path.isdir(MODEL_DIR):
+        try:
+            return _local_detect(text)
+        except Exception as e:
+            print(f"  Local model error: {e}")
+    else:
+        print(f"  Local model not found at {MODEL_DIR}, skipping fallback")
     return "general", 0.0
 
 def classify_all(clauses):
