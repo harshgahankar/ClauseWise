@@ -16,18 +16,107 @@ with open(os.path.join(BASE_DIR, "label_map.json")) as f:
 
 KNOWN_TYPES = set(label_map.values()) | {'general'}
 
-KEYWORD_RULES = [
-    ('arbitration',        re.compile(r'arbitrat|binding\s+arbitration|arbitrator', re.I), 0.75),
-    ('liability_waiver',   re.compile(r'indemnif|hold\s+harmless|not\s+(be\s+)?(liable|responsible)|waive.*liability|no\s+liability|limitation\s+of\s+liability|as\s+is|without\s+(any\s+)?warrant', re.I), 0.7),
-    ('data_selling',       re.compile(r'personally\s+identifiable\s+information|sell.*(personal|data)|share.*(personal|data)|data.*collect|privacy\s+policy|cookie|tracking', re.I), 0.65),
-    ('unilateral_changes', re.compile(r'may\s+(modify|change|amend|update)\s+(these\s+)?terms|at\s+any\s+time\s+(without\s+)?notice|sole\s+discretion|unilaterally|change\s+the\s+terms', re.I), 0.7),
-    ('auto_renewal',       re.compile(r'automatic(a(lly)?)?\s+renew|renew.*automatic|auto.?renew|evergreen', re.I), 0.8),
-    ('exit_penalty',       re.compile(r'early\s+termination\s+(fee|penalty|charge)|cancellation\s+(fee|penalty|charge)|termination\s+(fee|penalty|charge)|liquidated\s+damages', re.I), 0.7),
-    ('price_escalation',   re.compile(r'price\s+(increase|escalation|hike|change)|fee\s+(increase|change)|rate\s+(increase|adjust)|subject\s+to\s+change', re.I), 0.65),
-    ('ip_ownership',       re.compile(r'intellectual\s+property|assignment.*invention|work\s+(made\s+)?for\s+hire|owns?\s+(all\s+)?rights|all\s+right,\s+title|exclusive\s+rights', re.I), 0.7),
-    ('jurisdiction',       re.compile(r'governed\s+by\s+(the\s+)?laws\s+of|exclusive\s+(jurisdiction|venue)|proper\s+venue|forum|choice\s+of\s+(law|forum)', re.I), 0.6),
-    ('notice_period',      re.compile(r'\d+\s+days[.\s]+(written\s+)?notice|notice\s+period|prior\s+written\s+notice|shall\s+give\s+notice', re.I), 0.6),
-]
+KEYWORD_RULES = {
+    'arbitration': [
+        r'arbitration', r'arbitrator', r'arbitrate',
+        r'binding\s+(arbitration|dispute\s+resolution)',
+        r'final\s+and\s+binding', r'arbitration\s+(clause|agreement|proceeding)',
+        r'waive.*right.*(court|jury)', r'resolve.*arbitration',
+        r'american\s+arbitration', r'aaa\s+rules',
+    ],
+    'liability_waiver': [
+        r'indemnif', r'hold\s+harmless', r'indemnification',
+        r'not\s+(be\s+)?(liable|responsible)', r'no\s+liability',
+        r'waive.*liability', r'limitation\s+of\s+liability',
+        r'as\s+is\s+(and\s+)?without', r'without\s+(any\s+)?warrant',
+        r'disclaim.*warrant', r'not\s+responsible\s+for',
+        r'shall\s+indemnify', r'indemnity', r'indemnification',
+    ],
+    'data_selling': [
+        r'personally\s+identifiable', r'personal\s+information',
+        r'sell.*(personal|data)', r'share.*(personal|data)',
+        r'data\s+.*collect', r'privacy\s+policy',
+        r'cookie', r'tracking', r'third.?party.*(data|information|share)',
+        r'collect.*(data|information)', r'data\s+protection',
+        r'gdpr', r'ccpa', r'your\s+(data|information)',
+    ],
+    'unilateral_changes': [
+        r'may\s+(modify|change|amend|update|revise)',
+        r'at\s+any\s+time\s+(without\s+)?notice',
+        r'sole\s+discretion', r'unilaterally',
+        r'change\s+the\s+terms', r'amend.*terms',
+        r'modify.*agreement', r'updated\s+terms',
+        r'right\s+to\s+(modify|change|amend)',
+        r'without\s+(your\s+)?(consent|approval|notice)',
+    ],
+    'auto_renewal': [
+        r'automatic(ally)?\s+renew', r'renew.*automatic',
+        r'auto.?renew', r'evergreen',
+        r'renew.*period', r'renewal\s+(term|period|notice)',
+        r'non.?renew', r'fail.*notify.*renew',
+        r'continue.*month.to.month', r'month.?to.?month',
+    ],
+    'exit_penalty': [
+        r'early\s+termination\s+(fee|penalty|charge)',
+        r'cancellation\s+(fee|penalty|charge)',
+        r'termination\s+(fee|penalty|charge)',
+        r'liquidated\s+damages', r'penalty.*termination',
+        r'break.*fee', r'cancellation.*charge',
+        r'termination.*(penal|fee|charge|cost)',
+    ],
+    'price_escalation': [
+        r'price\s+(increase|escalation|hike|change)',
+        r'fee\s+(increase|change|adjust)',
+        r'rate\s+(increase|adjust|change)',
+        r'subject\s+to\s+change', r'escalation\s+clause',
+        r'cost\s+of\s+living\s+adjustment', r'cola',
+        r'increase\s+(in\s+)?(price|fee|rate|cost)',
+        r'pricing.*(change|update|modif)',
+    ],
+    'ip_ownership': [
+        r'intellectual\s+property', r'ip\s+rights',
+        r'assignment.*invention', r'work\s+(made\s+)?for\s+hire',
+        r'owns?\s+(all\s+)?rights', r'all\s+right,\s+title',
+        r'exclusive\s+rights', r'copyright',
+        r'proprietary\s+rights', r'patent',
+        r'trademark', r'trade\s+secret',
+        r'ownership.*(invention|creation|work)',
+        r'assign.*(right|interest|invention)',
+    ],
+    'jurisdiction': [
+        r'governed\s+by\s+(the\s+)?laws\s+of',
+        r'exclusive\s+(jurisdiction|venue)',
+        r'proper\s+venue', r'forum\s+(selection|non.?conveniens|shopping)',
+        r'choice\s+of\s+(law|forum)',
+        r'consent.*(jurisdiction|venue)',
+        r'venue.*(shall|will|must)',
+        r'court.*located', r'apply.*law.*state',
+    ],
+    'notice_period': [
+        r'\d+\s+days[.\s]+(written\s+)?notice',
+        r'notice\s+period', r'prior\s+written\s+notice',
+        r'shall\s+give\s+notice', r'notice.*shall\s+be\s+given',
+        r'notice.*required', r'days.*prior.*notice',
+        r'advance\s+notice', r'written\s+notice',
+        r'reasonable\s+notice', r'notice\s+in\s+writing',
+    ],
+}
+
+def _keyword_detect(text):
+    text_lower = text.lower()
+    best_type = "general"
+    best_score = 0
+    for clause_type, patterns in KEYWORD_RULES.items():
+        score = 0
+        for pattern_str in patterns:
+            if re.search(pattern_str, text_lower):
+                score += 1
+        if score > best_score:
+            best_type = clause_type
+            best_score = score
+    total = len(KEYWORD_RULES.get(best_type, []))
+    confidence = round((best_score / max(total, 1)) * 90, 1)
+    return best_type, confidence
 
 RISK_LEVELS = {
     'auto_renewal':       {'level': 'high',   'color': 'red'},
