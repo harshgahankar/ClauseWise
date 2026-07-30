@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import requests
 
 HF_MODEL = "harsh-101/clause-bert-classifier"
@@ -14,6 +15,19 @@ with open(os.path.join(BASE_DIR, "label_map.json")) as f:
     label_map = {int(k): v for k, v in label_map.items()}
 
 KNOWN_TYPES = set(label_map.values()) | {'general'}
+
+KEYWORD_RULES = [
+    ('arbitration',        re.compile(r'arbitrat|binding\s+arbitration|arbitrator', re.I), 0.75),
+    ('liability_waiver',   re.compile(r'indemnif|hold\s+harmless|not\s+(be\s+)?(liable|responsible)|waive.*liability|no\s+liability|limitation\s+of\s+liability|as\s+is|without\s+(any\s+)?warrant', re.I), 0.7),
+    ('data_selling',       re.compile(r'personally\s+identifiable\s+information|sell.*(personal|data)|share.*(personal|data)|data.*collect|privacy\s+policy|cookie|tracking', re.I), 0.65),
+    ('unilateral_changes', re.compile(r'may\s+(modify|change|amend|update)\s+(these\s+)?terms|at\s+any\s+time\s+(without\s+)?notice|sole\s+discretion|unilaterally|change\s+the\s+terms', re.I), 0.7),
+    ('auto_renewal',       re.compile(r'automatic(a(lly)?)?\s+renew|renew.*automatic|auto.?renew|evergreen', re.I), 0.8),
+    ('exit_penalty',       re.compile(r'early\s+termination\s+(fee|penalty|charge)|cancellation\s+(fee|penalty|charge)|termination\s+(fee|penalty|charge)|liquidated\s+damages', re.I), 0.7),
+    ('price_escalation',   re.compile(r'price\s+(increase|escalation|hike|change)|fee\s+(increase|change)|rate\s+(increase|adjust)|subject\s+to\s+change', re.I), 0.65),
+    ('ip_ownership',       re.compile(r'intellectual\s+property|assignment.*invention|work\s+(made\s+)?for\s+hire|owns?\s+(all\s+)?rights|all\s+right,\s+title|exclusive\s+rights', re.I), 0.7),
+    ('jurisdiction',       re.compile(r'governed\s+by\s+(the\s+)?laws\s+of|exclusive\s+(jurisdiction|venue)|proper\s+venue|forum|choice\s+of\s+(law|forum)', re.I), 0.6),
+    ('notice_period',      re.compile(r'\d+\s+days[.\s]+(written\s+)?notice|notice\s+period|prior\s+written\s+notice|shall\s+give\s+notice', re.I), 0.6),
+]
 
 RISK_LEVELS = {
     'auto_renewal':       {'level': 'high',   'color': 'red'},
@@ -80,6 +94,17 @@ def _local_detect(text):
     confidence, idx = torch.max(probs, dim=-1)
     return label_map.get(int(idx), "general"), round(float(confidence) * 100, 1)
 
+def _keyword_detect(text):
+    text_lower = text.lower()
+    best_type = "general"
+    best_conf = 0.0
+    for clause_type, pattern, confidence in KEYWORD_RULES:
+        if pattern.search(text_lower):
+            if confidence > best_conf:
+                best_type = clause_type
+                best_conf = confidence
+    return best_type, round(best_conf * 100, 1)
+
 def detect_type(text):
     try:
         clause_type, confidence = _hf_detect(text)
@@ -94,7 +119,9 @@ def detect_type(text):
             print(f"  Local model error: {e}")
     else:
         print(f"  Local model not found at {MODEL_DIR}, skipping fallback")
-    return "general", 0.0
+    clause_type, confidence = _keyword_detect(text)
+    print(f"  Keyword fallback: {clause_type} ({confidence}%)")
+    return clause_type, confidence
 
 def classify_all(clauses):
     return [classify_clause(c) for c in clauses]
