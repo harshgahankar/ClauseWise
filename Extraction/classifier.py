@@ -46,6 +46,8 @@ PLAIN_ENGLISH = {
 def _hf_detect(text):
     response = requests.post(API_URL, headers=HEADERS, json={"inputs": text}, timeout=30)
     result = response.json()
+    if isinstance(result, dict) and 'error' in result:
+        raise Exception(f"HF API error: {result['error']}")
     if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
         predictions = result[0]
         top = max(predictions, key=lambda x: x['score'])
@@ -56,7 +58,7 @@ def _hf_detect(text):
             return label_map.get(idx, "general"), confidence
         if label_str in KNOWN_TYPES:
             return label_str, confidence
-    return None, 0.0
+    raise Exception(f"Unexpected HF API response format: {type(result).__name__}")
 
 _tokenizer = None
 _model = None
