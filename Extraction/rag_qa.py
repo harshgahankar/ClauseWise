@@ -9,10 +9,6 @@ def _get_client():
         _client = Groq(api_key=os.getenv("GROQ_API_KEY"))
     return _client
 
-def _embed(text):
-    from rag_store import embed
-    return embed(text)
-
 def answer_question(question, contract_clauses):
     if not contract_clauses:
         return "Please upload and analyze a contract first before asking questions."
@@ -22,21 +18,25 @@ def answer_question(question, contract_clauses):
 
     mentioned_numbers = re.findall(r'(?:\bclause\b|\bsection\b|§)?\s*(\d+)(?:\.|\b)', question.lower())
 
-    q_vec   = np.array(_embed(question))
-    scored  = []
-    for clause in contract_clauses:
-        boost = 0.0
-        clause_id = str(clause.get('id', ''))
-        if clause_id in mentioned_numbers:
-            boost = 1.0
+    top_clauses = contract_clauses[:20]
 
-        text_to_embed = clause.get('full_text') or clause.get('originalText', '')
-        c_vec      = np.array(_embed(text_to_embed))
-        similarity = float(np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
-        scored.append((similarity + boost, clause))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top_clauses = [c for _, c in scored[:20]]
+    try:
+        from rag_store import embed
+        q_vec = np.array(embed(question))
+        scored = []
+        for clause in contract_clauses:
+            boost = 0.0
+            clause_id = str(clause.get('id', ''))
+            if clause_id in mentioned_numbers:
+                boost = 1.0
+            text_to_embed = clause.get('full_text') or clause.get('originalText', '')
+            c_vec = np.array(embed(text_to_embed))
+            similarity = float(np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
+            scored.append((similarity + boost, clause))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_clauses = [c for _, c in scored[:20]]
+    except Exception:
+        top_clauses = contract_clauses[:20]
 
     context = "\n\n".join([
         f"Clause ID: {c.get('id', '')} | Title: {c.get('title', '')} | Risk: {c.get('risk_level') or c.get('risk', '')}\n"

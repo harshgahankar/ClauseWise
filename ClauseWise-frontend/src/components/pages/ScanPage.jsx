@@ -63,60 +63,71 @@ export default function ScanPage() {
   };
 
   const startAnalysis = useCallback(async () => {
-  if (!file) return;
-  setAnalyzing(true);
-  setIsAnalyzing(true);
-  setProgress(0);
-  setCurrentStep(0);
-  setError('');
+    if (!file) return;
+    setAnalyzing(true);
+    setIsAnalyzing(true);
+    setProgress(0);
+    setCurrentStep(0);
+    setError('');
 
-  try {
-    // Animate steps while real API call runs in parallel
-    const stepPromise = (async () => {
-      for (let step = 0; step < ANALYSIS_STEPS.length; step++) {
-        setCurrentStep(step);
-        const start = Math.round((step / ANALYSIS_STEPS.length) * 100);
-        const end   = Math.round(((step + 1) / ANALYSIS_STEPS.length) * 100);
-        for (let p = start; p <= end; p++) {
-          await new Promise(r => setTimeout(r, 80));  // slower = more realistic
-          setProgress(p);
+    try {
+      const controller = new AbortController();
+      const TIMEOUT_MS = 120_000;
+
+      // Animate progress from 0→95% while API call runs
+      const stepPromise = (async () => {
+        for (let step = 0; step < ANALYSIS_STEPS.length; step++) {
+          setCurrentStep(step);
+          const start = Math.round((step / ANALYSIS_STEPS.length) * 95);
+          const end   = Math.round(((step + 1) / ANALYSIS_STEPS.length) * 95);
+          for (let p = start; p <= end; p++) {
+            await new Promise(r => setTimeout(r, 80));
+            if (controller.signal.aborted) return;
+            setProgress(p);
+          }
         }
+      })();
+
+      const { analyzePDF } = await import('../../utils/mockData');
+
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const result = await analyzePDF(file, controller.signal);
+      clearTimeout(timeoutId);
+
+      // Wait for animation to catch up, then jump to 100%
+      await stepPromise;
+      setProgress(100);
+      await new Promise(r => setTimeout(r, 200));
+
+      const newDoc = {
+        id: Date.now().toString(),
+        name: file.name,
+        size: (file.size / 1024 / 1024).toFixed(1) + ' MB',
+        category: 'Contract',
+        type: result.contractType || 'Other',
+        scanDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        safetyScore: result.safetyScore,
+        riskLevel: result.verdictColor === 'safe' ? 'SAFE' : result.verdictColor === 'caution' ? 'MODERATE' : 'CRITICAL',
+        status: 'complete',
+        fullResult: result
+      };
+      addDocument(newDoc);
+
+      setAnalysisResult(result);
+      setIsAnalyzing(false);
+      navigate('/analysis');
+
+    } catch (err) {
+      console.error('Analysis failed:', err);
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server took too long to respond. Please try again or check your backend.');
+      } else {
+        setError(err.message || 'Analysis failed. Make sure your backend server is running on port 5000.');
       }
-    })();
-
-    // Real API call — import analyzePDF at the top of the file
-    const { analyzePDF } = await import('../../utils/mockData');
-    const [result] = await Promise.all([
-      analyzePDF(file),
-      stepPromise,
-    ]);
-
-    // Save to document list
-    const newDoc = {
-      id: Date.now().toString(),
-      name: file.name,
-      size: (file.size / 1024 / 1024).toFixed(1) + ' MB',
-      category: 'Contract',
-      type: result.contractType || 'Other',
-      scanDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      safetyScore: result.safetyScore,
-      riskLevel: result.verdictColor === 'safe' ? 'SAFE' : result.verdictColor === 'caution' ? 'MODERATE' : 'CRITICAL',
-      status: 'complete',
-      fullResult: result // Store full result for later viewing
-    };
-    addDocument(newDoc);
-
-    setAnalysisResult(result);
-    setIsAnalyzing(false);
-    navigate('/analysis');
-
-  } catch (err) {
-    console.error('Analysis failed:', err);
-    setError(err.message || 'Analysis failed. Make sure your backend server is running on port 5000.');
-    setAnalyzing(false);
-    setIsAnalyzing(false);
-  }
-}, [file, navigate, setAnalysisResult, setIsAnalyzing]);
+      setAnalyzing(false);
+      setIsAnalyzing(false);
+    }
+  }, [file, navigate, setAnalysisResult, setIsAnalyzing]);
 
   return (
     <div className="scan-page">

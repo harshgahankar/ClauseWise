@@ -1,3 +1,3 @@
-const API_URL = process.env.REACT_APP_API_URL || 'https://clausewise-i85s.onrender.com';
+const API_URL = 'http://localhost:5000';
 
 export default API_URL;

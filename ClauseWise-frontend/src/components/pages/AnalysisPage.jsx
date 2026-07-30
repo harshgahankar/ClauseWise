@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Download, ChevronDown, ChevronUp, ArrowLeft, MessageSquare, Columns } from 'lucide-react';
+import { Download, ChevronDown, ChevronUp, ArrowLeft, MessageSquare, Columns, Send, X, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { RISK_COLORS } from '../../utils/mockData';
 import { generatePDFReport } from '../../utils/reportGenerator';
@@ -124,9 +124,20 @@ export default function AnalysisPage() {
     { role: 'assistant', text: "Hi! I've analyzed your contract. Ask me anything about it — I'll give you a straight answer in plain English." }
   ]);
   const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
+
+  const suggestions = [
+    'What are the biggest risks?',
+    'Summarise this document',
+    'Which clauses should I negotiate?',
+  ];
 
   const filteredClauses = result.clauses.filter(c => filter === 'all' || c.risk === filter);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
   const handleExport = () => {
     generatePDFReport(result);
@@ -138,43 +149,54 @@ export default function AnalysisPage() {
     unsafe: { color: 'var(--unsafe)', bg: 'var(--unsafe-bg)', label: '✕ High Risk' },
   }[result.verdictColor] || {};
 
-  const handleChat = async () => {
-  if (!chatInput.trim()) return;
-
-  const userMessage = chatInput.trim();
-  setChatInput('');
-
-  // Add user message to chat
-  setChatMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-
-  // Add loading indicator
-  setChatMessages(prev => [...prev, { role: 'assistant', text: '...' }]);
-
-  try {
-    const response = await fetch(`${API_URL}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: userMessage,
-        clauses: analysisResult?.clauses || []   // your existing context data
-      })
+  const formatMessage = (text) => {
+    if (text === '...') return text;
+    return text.split('\n').map((line, i) => {
+      if (line.startsWith('- ') || line.startsWith('• ')) {
+        return <span key={i} className="chat-msg-line chat-msg-bullet">{line.slice(2)}</span>;
+      }
+      if (/^\d+[\.\)] /.test(line)) {
+        return <span key={i} className="chat-msg-line chat-msg-num">{line}</span>;
+      }
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <strong key={i} className="chat-msg-line">{line.slice(2, -2)}</strong>;
+      }
+      return <span key={i} className="chat-msg-line">{line || '\u00A0'}</span>;
     });
+  };
 
-    const data = await response.json();
+  const handleChat = async (message) => {
+    const userMessage = message || chatInput.trim();
+    if (!userMessage) return;
 
-    // Replace the "..." with the real answer
-    setChatMessages(prev => [
-      ...prev.slice(0, -1),
-      { role: 'assistant', text: data.answer }
-    ]);
+    setChatInput('');
+    setIsChatLoading(true);
+    setChatMessages(prev => [...prev, { role: 'user', text: userMessage }]);
 
-  } catch (err) {
-    setChatMessages(prev => [
-      ...prev.slice(0, -1),
-      { role: 'assistant', text: 'Sorry, I could not reach the server. Make sure your backend is running.' }
-    ]);
-  }
-};
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: userMessage,
+          clauses: analysisResult?.clauses || []
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Server error');
+      }
+
+      setChatMessages(prev => [...prev, { role: 'assistant', text: data.answer }]);
+
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', text: err.message || 'Sorry, I could not reach the server. Make sure your backend is running.' }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
 
   return (
     <div className="analysis-page">
@@ -289,28 +311,62 @@ export default function AnalysisPage() {
           <div className="chat-overlay" onClick={(e) => e.target === e.currentTarget && setChatOpen(false)}>
             <div className="chat-modal">
               <div className="chat-modal__header">
-                <div>
-                  <div className="chat-modal__title">Ask AI Lawyer</div>
-                  <div className="chat-modal__sub">Have a specific question about this contract?</div>
+                <div className="chat-modal__header-left">
+                  <div className="chat-modal__icon"><Sparkles size={18} /></div>
+                  <div>
+                    <div className="chat-modal__title">AI Lawyer</div>
+                    <div className="chat-modal__sub">Ask anything about this contract</div>
+                  </div>
                 </div>
-                <button className="chat-modal__close" onClick={() => setChatOpen(false)}>✕</button>
+                <button className="chat-modal__close" onClick={() => setChatOpen(false)}><X size={18} /></button>
               </div>
+
               <div className="chat-messages">
                 {chatMessages.map((m, i) => (
                   <div key={i} className={`chat-message chat-message--${m.role}`}>
-                    {m.text}
+                    {m.role === 'assistant' && (
+                      <div className="chat-msg-avatar">
+                        <Sparkles size={14} />
+                      </div>
+                    )}
+                    <div className="chat-msg-content">
+                      {m.text === '...' ? (
+                        <span className="chat-typing">
+                          <span className="chat-typing-dot" />
+                          <span className="chat-typing-dot" />
+                          <span className="chat-typing-dot" />
+                        </span>
+                      ) : (
+                        formatMessage(m.text)
+                      )}
+                    </div>
                   </div>
                 ))}
+                <div ref={chatEndRef} />
               </div>
+
+              {chatMessages.length === 1 && (
+                <div className="chat-suggestions">
+                  {suggestions.map((s, i) => (
+                    <button key={i} className="chat-suggestion-btn" onClick={() => handleChat(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="chat-input-row">
-                <input
+                <textarea
                   className="chat-input"
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleChat()}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChat(); } }}
                   placeholder="Ask a question about this contract…"
+                  rows={1}
                 />
-                <button className="chat-send" onClick={handleChat}>Send</button>
+                <button className="chat-send" onClick={() => handleChat()} disabled={!chatInput.trim() || isChatLoading}>
+                  <Send size={16} />
+                </button>
               </div>
             </div>
           </div>

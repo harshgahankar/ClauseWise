@@ -127,13 +127,14 @@ function backendToFrontend(apiResponse, fileName) {
   };
 }
 
-export async function analyzePDF(file) {
+export async function analyzePDF(file, signal) {
   const formData = new FormData();
   formData.append('file', file);
 
   const response = await fetch(`${BACKEND_URL}/analyze-pdf`, {
     method: 'POST',
     body: formData,
+    signal,
   });
 
   if (!response.ok) {

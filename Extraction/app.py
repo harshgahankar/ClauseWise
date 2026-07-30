@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from extractor import extract_clauses
 from classifier import classify_all
 from translator import translate_all
@@ -13,7 +12,28 @@ from rag_qa import answer_question, support_answer
 import uuid
 
 app = Flask(__name__)
-CORS(app)
+
+class CORSMiddleware:
+    def __init__(self, app):
+        self.app = app
+    def __call__(self, environ, start_response):
+        def cors_start_response(status, headers, *args):
+            headers.append(('Access-Control-Allow-Origin', '*'))
+            headers.append(('Access-Control-Allow-Headers', 'Content-Type, Authorization'))
+            headers.append(('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'))
+            return start_response(status, headers, *args)
+        if environ['REQUEST_METHOD'] == 'OPTIONS':
+            headers = [
+                ('Content-Type', 'application/json'),
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Headers', 'Content-Type, Authorization'),
+                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+            ]
+            start_response('200 OK', headers)
+            return [b'{"ok": true}']
+        return self.app(environ, cors_start_response)
+
+app.wsgi_app = CORSMiddleware(app.wsgi_app)
 
 @app.route('/')
 def home():
@@ -130,8 +150,12 @@ def chat():
     data = request.get_json()
     if not data or 'question' not in data:
         return jsonify({'error': 'Send JSON with "question" and "clauses"'}), 400
-    answer = answer_question(data['question'], data.get('clauses', []))
-    return jsonify({'answer': answer})
+    try:
+        answer = answer_question(data['question'], data.get('clauses', []))
+        return jsonify({'answer': answer})
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/support-chat', methods=['POST'])
 def support_chat():
