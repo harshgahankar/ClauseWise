@@ -183,17 +183,6 @@ def _local_detect(text):
     confidence, idx = torch.max(probs, dim=-1)
     return label_map.get(int(idx), "general"), round(float(confidence) * 100, 1)
 
-def _keyword_detect(text):
-    text_lower = text.lower()
-    best_type = "general"
-    best_conf = 0.0
-    for clause_type, pattern, confidence in KEYWORD_RULES:
-        if pattern.search(text_lower):
-            if confidence > best_conf:
-                best_type = clause_type
-                best_conf = confidence
-    return best_type, round(best_conf * 100, 1)
-
 def detect_type(text):
     try:
         clause_type, confidence = _hf_detect(text)
